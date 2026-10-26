@@ -136,3 +136,30 @@ def test_app_files():
     assert '<meta name="app-version" content="dev">' in html and re.search(r"\[hidden\]\{display:none!important\}", html)
     assert (ROOT / "sw.js").is_file()
     assert "site/index.html" in (ROOT / ".github" / "workflows" / "pages.yml").read_text(encoding="utf-8")
+
+
+def test_bad_backup_is_cleaned():
+    """改過的備份碼：奇怪的 id、null、非數字費率都要被清掉，不能塞程式碼進畫面。"""
+    out = node("""
+    const d=c.importCode(JSON.stringify({app:"taco-sheets",seq:1,budget:[null,{id:'1"><img src=x onerror=alert(1)>',date:"2026-10-01",kind:"支出",amount:1},{id:5},{id:5}],
+      trades:[null,"x",[1]],todos:[{id:2}],settings:{fees:{min:'20"><b>',rate:"0.001425"},expense:["餐飲",3,"<b>x</b>"]},prices:{"0050":"abc","2330":1000}}));
+    console.log(JSON.stringify({ids:d.budget.map(x=>x.id),trades:d.trades.length,todo:d.todos.map(x=>x.id),seq:d.seq,min:d.settings.fees.min,rate:d.settings.fees.rate,
+      exp:d.settings.expense,prices:d.prices}));""")
+    if out is None:
+        return
+    ids = out["ids"]
+    assert all(isinstance(i, int) and i > 0 for i in ids) and len(set(ids + out["todo"])) == len(ids) + 1
+    assert out["trades"] == 0 and out["seq"] > max(ids + out["todo"])
+    assert out["min"] == 20 and out["rate"] == 0.001425 and out["prices"] == {"2330": 1000}
+    assert out["exp"] == ["餐飲", "<b>x</b>"]   # 文字照存，畫面顯示時會轉義
+
+
+def test_numbers_and_csv_quotes():
+    out = node("""
+    const t=c.parseTable("日期\\t金額\\t比例\\n2026/10/1\\t100\\t12%\\n2026/10/2\\t1,234\\t3號");
+    const q=c.parseTable('名稱,金額\\n\\x22台北, 大安\\x22,\\x221,234\\x22\\n\\x22說\\x22\\x22好\\x22\\x22\\x22,5');
+    console.log(JSON.stringify({cols:c.numericCols(t),sum:c.colNums(t,1).reduce((a,b)=>a+b,0),q:q.rows,qcols:c.numericCols(q)}));""")
+    if out is None:
+        return
+    assert out["cols"] == [1] and out["sum"] == 1334
+    assert out["q"] == [["台北, 大安", "1,234"], ['說"好"', "5"]] and out["qcols"] == [1]

@@ -26,10 +26,25 @@ function normalize(d) {
   out.settings.fees = Object.assign(clone(DEFAULTS.fees), (d.settings && d.settings.fees) || {});
   for (const k of ["income", "expense", "pay", "todoCats"])
     if (!Array.isArray(out.settings[k])) out.settings[k] = clone(DEFAULTS[k]);
-  for (const k of ["budget", "trades", "todos"]) if (!Array.isArray(out[k])) out[k] = [];
-  if (!out.prices || typeof out.prices !== "object") out.prices = {};
+  // 費率：每一項都要是 0 以上的數字，不然用預設（備份碼可能被改過）
+  for (const k of Object.keys(DEFAULTS.fees)) { const v = Number(out.settings.fees[k]); out.settings.fees[k] = isFinite(v) && v >= 0 ? v : DEFAULTS.fees[k]; }
+  for (const k of ["income", "expense", "pay", "todoCats"]) {
+    out.settings[k] = out.settings[k].filter((x) => typeof x === "string" && x.trim()).map((x) => x.trim().slice(0, 40));
+    if (!out.settings[k].length) out.settings[k] = clone(DEFAULTS[k]);
+  }
+  // 紀錄：只留物件；id 一律是正整數、不重複，seq 接在最大 id 後面（避免改過的備份碼塞奇怪的 id）
+  let maxId = 0;
+  const used = new Set();
+  for (const k of ["budget", "trades", "todos"]) {
+    out[k] = (Array.isArray(out[k]) ? out[k] : []).filter((x) => x && typeof x === "object" && !Array.isArray(x)).map((x) => Object.assign({}, x));
+    for (const x of out[k]) { const id = Number(x.id); x.id = Number.isInteger(id) && id > 0 && !used.has(id) ? id : 0; if (x.id) { used.add(x.id); maxId = Math.max(maxId, x.id); } }
+  }
+  for (const k of ["budget", "trades", "todos"]) for (const x of out[k]) if (!x.id) { x.id = ++maxId; used.add(x.id); }
+  out.seq = Math.max(Number(out.seq) || 1, maxId + 1);
+  const prices = {};
+  if (out.prices && typeof out.prices === "object") for (const [c, v] of Object.entries(out.prices)) if (Number(v) > 0) prices[c] = Number(v);
+  out.prices = prices;
   if (typeof out.table !== "string") out.table = "";
-  if (!(out.seq > 0)) out.seq = 1;
   return out;
 }
 
@@ -129,12 +144,22 @@ function parseTable(text) {
   const lines = String(text || "").replace(/\r/g, "").split("\n").filter((l) => l.trim() !== "");
   if (!lines.length) return { headers: [], rows: [] };
   const sep = lines[0].includes("\t") ? "\t" : lines[0].includes(",") ? "," : /\s{2,}|\s/.test(lines[0].trim()) ? /\s+/ : "\t";
-  const split = (l) => (sep instanceof RegExp ? l.trim().split(sep) : l.split(sep)).map((c) => c.trim());
+  const csv = (l) => {   // 逗號分隔，支援 "台北, 大安"、"1,234" 這種有引號的欄位
+    const out = []; let cur = "", q = false;
+    for (let i = 0; i < l.length; i++) {
+      const ch = l[i];
+      if (q) { if (ch === '"' && l[i + 1] === '"') { cur += '"'; i++; } else if (ch === '"') q = false; else cur += ch; }
+      else if (ch === '"') q = true; else if (ch === ",") { out.push(cur); cur = ""; } else cur += ch;
+    }
+    out.push(cur); return out;
+  };
+  const split = (l) => (sep instanceof RegExp ? l.trim().split(sep) : sep === "," ? csv(l) : l.split(sep)).map((c) => c.trim());
   const headers = split(lines[0]).map((h, i) => h || `欄${i + 1}`);
   const rows = lines.slice(1).map(split).map((r) => headers.map((_, i) => (r[i] === undefined ? "" : r[i])));
   return { headers, rows };
 }
-const isNum = (s) => s !== "" && isFinite(num(s));
+const NUM_RE = /^[-+]?(\d{1,3}(,\d{3})+|\d*)(\.\d+)?([eE][-+]?\d+)?$/;
+const isNum = (s) => { const t = String(s).trim(); return t !== "" && t !== "-" && t !== "+" && t !== "." && NUM_RE.test(t) && isFinite(num(t)); };
 /* 一半以上是數字的欄才算數字欄 */
 function numericCols(tbl) {
   return tbl.headers.map((_, i) => i).filter((i) => {

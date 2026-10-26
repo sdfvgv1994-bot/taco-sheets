@@ -23,6 +23,7 @@ const fmt = (n) => (n === null || n === undefined || !isFinite(n) ? "—" : Math
 const fmt2 = (n, d = 2) => (n === null || n === undefined || !isFinite(n) ? "—" : n.toLocaleString("zh-TW", { minimumFractionDigits: d, maximumFractionDigits: d }));
 const pct = (n, d = 1) => (n === null || n === undefined || !isFinite(n) ? "—" : (n * 100).toFixed(d) + "%");
 const sign = (n) => (n < 0 ? "neg" : n > 0 ? "pos" : "");
+const tw = (n) => (n > 0 ? "up" : n < 0 ? "down" : "");   // 股票：台股習慣漲紅跌綠
 const opts = (list, sel) => list.map((v) => `<option${v === sel ? " selected" : ""}>${esc(v)}</option>`).join("");
 const today = () => todayStr();
 let toastT = 0;
@@ -124,7 +125,7 @@ function vBudget() {
     ${list.length ? `<div class="list">${list.map((x) => `<div class="item"><div class="main"><div class="t">${esc(x.item || x.cat || "（沒寫項目）")}</div>
       <div class="meta">${esc(x.date)}・<span class="badge">${esc(x.kind)}</span>${esc(x.cat || "未分類")}${x.pay ? "・" + esc(x.pay) : ""}${x.note ? "・" + esc(x.note) : ""}</div></div>
       <div><div class="amt ${x.kind === "收入" ? "pos" : ""}">${x.kind === "收入" ? "+" : "−"}${fmt(+x.amount)}</div>
-      <div class="ops" style="margin-top:4px"><button class="sm" data-eb="${x.id}">改</button><button class="sm danger" data-db="${x.id}">刪</button></div></div></div>`).join("")}</div>`
+      <div class="ops" style="margin-top:4px"><button class="sm" data-eb="${esc(x.id)}">改</button><button class="sm danger" data-db="${esc(x.id)}">刪</button></div></div></div>`).join("")}</div>`
       : '<p class="empty">還沒有記錄。上面記一筆試試看</p>'}
   </div>`;
 }
@@ -166,7 +167,7 @@ function vStock() {
   const sum = (k) => H.reduce((a, h) => a + (h[k] || 0), 0);
   const codes = [...new Set(D.trades.map((t) => t.code))];
   const list = D.trades.slice().sort((a, b) => (b.date || "").localeCompare(a.date || "") || b.id - a.id);
-  const pctIn = (name, v, step) => `<input name="${name}" type="number" inputmode="decimal" step="${step}" min="0" value="${+(v * 100).toFixed(6)}">`;
+  const pctIn = (name, v) => `<input name="${name}" type="number" inputmode="decimal" step="any" min="0" value="${esc(+(v * 100).toFixed(6))}">`;
   return `<h2>📈 股票交易紀錄</h2>
   <form class="card" id="fT" autocomplete="off"><h3>${e ? "修改這筆交易" : "記一筆交易"}</h3>
     <div class="row" style="margin-bottom:10px"><div class="seg" role="group" aria-label="買賣">
@@ -183,13 +184,13 @@ function vStock() {
     <div class="row" style="margin-top:8px"><button class="main">${e ? "更新" : "加入"}</button>${e ? '<button type="button" id="tCancel">取消</button>' : ""}</div>
   </form>
   <div class="card"><h3>持股彙總（自動）</h3>
-    <div class="stats" style="margin-bottom:10px"><div><small>已實現損益</small><strong class="${sign(sum("realized"))}">${fmt(sum("realized"))}</strong></div>
+    <div class="stats" style="margin-bottom:10px"><div><small>已實現損益</small><strong class="${tw(sum("realized"))}">${fmt(sum("realized"))}</strong></div>
       <div><small>持股成本</small><strong>${fmt(sum("cost"))}</strong></div>
-      <div><small>未實現損益</small><strong class="${sign(sum("unreal"))}">${H.some((h) => h.unreal !== null) ? fmt(sum("unreal")) : "—"}</strong></div></div>
+      <div><small>未實現損益</small><strong class="${tw(sum("unreal"))}">${H.some((h) => h.unreal !== null) ? fmt(sum("unreal")) : "—"}</strong></div></div>
     ${H.length ? `<div class="tbl"><table><thead><tr><th>代號</th><th class="l">名稱</th><th>目前持股</th><th>平均成本</th><th>持股成本</th><th>現價（自己填）</th><th>市值</th><th>未實現</th><th>報酬率</th><th>已實現</th><th class="l">提醒</th></tr></thead><tbody>
       ${H.map((h) => `<tr${h.warn ? ' style="background:var(--bad-bg)"' : ""}><td>${esc(h.code)}</td><td class="l">${esc(h.name)}</td><td class="${h.qty < 0 ? "neg" : ""}">${fmt(h.qty)}</td><td>${fmt2(h.avg)}</td><td>${fmt(h.cost)}</td>
         <td><input class="px" data-code="${esc(h.code)}" type="number" inputmode="decimal" step="any" min="0" value="${h.price ?? ""}" style="width:90px;padding:4px 6px" aria-label="${esc(h.code)} 現價"></td>
-        <td>${fmt(h.mv)}</td><td class="${sign(h.unreal)}">${fmt(h.unreal)}</td><td class="${sign(h.ret)}">${pct(h.ret)}</td><td class="${sign(h.realized)}">${fmt(h.realized)}</td><td class="l neg">${h.warn ? "⚠ " + h.warn : ""}</td></tr>`).join("")}
+        <td>${fmt(h.mv)}</td><td class="${tw(h.unreal)}">${fmt(h.unreal)}</td><td class="${tw(h.ret)}">${pct(h.ret)}</td><td class="${tw(h.realized)}">${fmt(h.realized)}</td><td class="l neg">${h.warn ? "⚠ " + h.warn : ""}</td></tr>`).join("")}
     </tbody></table></div>
     <p class="note">平均成本法（全部買進成本÷買進股數），跟券商算法可能有小差異；未實現損益沒扣賣出時的手續費和稅。只做計算，不是投資建議。</p>`
       : '<p class="empty">還沒有交易。上面記一筆，彙總會自動出現</p>'}
@@ -197,18 +198,18 @@ function vStock() {
   <div class="card"><h3>交易紀錄（${list.length} 筆）</h3>
     ${list.length ? `<div class="tbl"><table><thead><tr><th>日期</th><th class="l">代號</th><th class="l">買賣</th><th>股數</th><th>成交價</th><th>成交金額</th><th>手續費</th><th>交易稅</th><th>收付金額</th><th></th></tr></thead><tbody>
       ${list.map((t) => { const c = tradeCalc(t, F) || {}; return `<tr><td>${esc(t.date)}</td><td class="l">${esc(t.code)} ${esc(t.name || "")}</td><td class="l">${esc(t.side)}・${esc(t.type)}</td>
-        <td>${fmt(+t.qty)}</td><td>${fmt2(+t.price)}</td><td>${fmt(c.amount)}</td><td>${fmt(c.fee)}</td><td>${fmt(c.tax)}</td><td class="${sign(c.net)}">${fmt(c.net)}</td>
-        <td><button class="sm" data-et="${t.id}">改</button> <button class="sm danger" data-dt="${t.id}">刪</button></td></tr>`; }).join("")}
+        <td>${fmt(+t.qty)}</td><td>${fmt2(+t.price)}</td><td>${fmt(c.amount)}</td><td>${fmt(c.fee)}</td><td>${fmt(c.tax)}</td><td class="${tw(c.net)}">${fmt(c.net)}</td>
+        <td><button class="sm" data-et="${esc(t.id)}">改</button> <button class="sm danger" data-dt="${esc(t.id)}">刪</button></td></tr>`; }).join("")}
     </tbody></table></div>` : '<p class="empty">還沒有交易</p>'}
   </div>
   <details class="card" id="feeBox"><summary>費用與稅率（依你的券商調整）</summary>
     <form id="fF" class="grid" style="margin-top:10px">
-      <label class="f">手續費率（%）${pctIn("rate", F.rate, "0.0001")}</label>
-      <label class="f">手續費折扣（%，6 折填 60）${pctIn("disc", F.disc, "1")}</label>
-      <label class="f">最低手續費（元）<input name="min" type="number" inputmode="numeric" min="0" step="1" value="${F.min}"></label>
-      <label class="f">證交稅：股票（%）${pctIn("taxStock", F.taxStock, "0.01")}</label>
-      <label class="f">證交稅：ETF（%）${pctIn("taxEtf", F.taxEtf, "0.01")}</label>
-      <label class="f">證交稅：當沖（%）${pctIn("taxDay", F.taxDay, "0.01")}</label>
+      <label class="f">手續費率（%）${pctIn("rate", F.rate)}</label>
+      <label class="f">手續費折扣（%，6 折填 60）${pctIn("disc", F.disc)}</label>
+      <label class="f">最低手續費（元）<input name="min" type="number" inputmode="decimal" min="0" step="any" value="${esc(F.min)}"></label>
+      <label class="f">證交稅：股票（%）${pctIn("taxStock", F.taxStock)}</label>
+      <label class="f">證交稅：ETF（%）${pctIn("taxEtf", F.taxEtf)}</label>
+      <label class="f">證交稅：當沖（%）${pctIn("taxDay", F.taxDay)}</label>
       <div class="row" style="grid-column:1/-1"><button class="main">儲存費率</button><button type="button" id="feeReset">回到預設</button></div>
     </form>
     <p class="note">預設：手續費上限 0.1425%、整股最低 20 元（零股依券商）；證交稅賣出才收，股票 0.3%、ETF 0.1%、現股當沖 0.15%（減半實施到 2027/12/31）。ETF 當沖請選「ETF」。</p>
@@ -233,7 +234,7 @@ function bindStock() {
     if (!tradeCalc(rec, F)) return toast("股數、成交價請填正數");
     if (ui.editT) { Object.assign(D.trades.find((x) => x.id === ui.editT), rec); ui.editT = null; toast("已更新"); }
     else { D.trades.push(Object.assign({ id: nextId() }, rec)); toast(`已記下：${side} ${rec.code} ${fmt(rec.qty)} 股`); }
-    ui.side = side; save(); render();
+    ui.side = "買進"; save(); render();   // 下一筆回到「買進」，免得連續記錯方向
   };
   if ($("tCancel")) $("tCancel").onclick = () => { ui.editT = null; render(); };
   document.querySelectorAll("input.px").forEach((i) => i.onchange = () => {
@@ -295,8 +296,8 @@ function vTodo() {
       return `<div class="item${x.state === "完成" ? " done" : d !== null && d < 0 ? " overdue" : d !== null && d <= 3 ? " soon" : ""}"><div class="main">
         <div class="t">${x.pri === "高" ? '<span class="badge hi">高</span>' : ""}${esc(x.title)}</div>
         <div class="meta">${dueBadge(d)}${esc(x.cat || "")}${x.who ? "・" + esc(x.who) : ""}${x.due ? `・到期 ${esc(x.due)}` : ""}${x.state === "完成" && x.doneDate ? `・${esc(x.doneDate)} 完成` : ""}${x.note ? "・" + esc(x.note) : ""}</div></div>
-        <div class="ops"><select class="st" data-id="${x.id}" style="width:auto;padding:4px 6px;font-size:13px" aria-label="狀態">${opts(TODO_STATES, x.state)}</select>
-        <button class="sm" data-ed="${x.id}">改</button><button class="sm danger" data-dd="${x.id}">刪</button></div></div>`; }).join("")}</div>`
+        <div class="ops"><select class="st" data-id="${esc(x.id)}" style="width:auto;padding:4px 6px;font-size:13px" aria-label="狀態">${opts(TODO_STATES, x.state)}</select>
+        <button class="sm" data-ed="${esc(x.id)}">改</button><button class="sm danger" data-dd="${esc(x.id)}">刪</button></div></div>`; }).join("")}</div>`
       : `<p class="empty">${D.todos.length ? "這個篩選沒有項目" : "清單是空的。上面加一項試試看"}</p>`}
     <p class="note">紅底＝逾期；橘底＝3 天內到期；完成的會劃掉，排在最後。</p>
   </div>`;

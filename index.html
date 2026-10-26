@@ -66,6 +66,9 @@ tr.total td{font-weight:700;background:var(--soft)}
 td.l,th.l{text-align:left}
 td.code{font-family:ui-monospace,Consolas,monospace;font-size:12px;color:var(--muted);text-align:left}
 .neg{color:var(--bad)}
+.up{color:#d6332a}
+.down{color:#1a8f4a}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .up{color:#ff7468}:root:not([data-theme="light"]) .down{color:#4cc38a}}
 .pos{color:var(--good)}
 .tiles{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(230px,1fr))}
 a.tile{display:block;text-decoration:none;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;position:relative;overflow:hidden}
