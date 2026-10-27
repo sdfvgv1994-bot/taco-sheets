@@ -46,7 +46,7 @@ def test_stock_fees_tax_and_holdings():
       {code:"2330",side:"賣出",type:"當沖",qty:1000,price:1000},{code:"9999",side:"買進",type:"股票",qty:10,price:12}];
     const calc=T.map(t=>c.tradeCalc(t,f)),disc=c.tradeCalc({side:"買進",type:"股票",qty:1000,price:50},Object.assign({},f,{disc:0.6}));
     const H=c.holdings(T,f,{"0000":52});
-    console.log(JSON.stringify({calc,disc,H:H.map(h=>[h.code,h.buyQty,h.buyCost,h.avg,h.sellQty,h.sellNet,h.realized,h.qty,h.cost,h.mv,h.unreal,h.warn])}));""")
+    console.log(JSON.stringify({calc,disc,H:H.map(h=>[h.code,h.buyQty,h.buyCost,h.avg,h.sellQty,h.sellNet,h.realized,h.qty,h.cost,h.mv,h.unreal,h.warn,h.sellCost,h.unrealNet])}));""")
     if out is None:
         return
     c = out["calc"]
@@ -59,6 +59,9 @@ def test_stock_fees_tax_and_holdings():
     h = {r[0]: r for r in out["H"]}
     assert h["0000"][1:9] == [1000, 50071, 50.071, 500, 27379, 2343.5, 500, 25035.5]
     assert h["0000"][9] == 26000 and h["0000"][10] == 964.5
+    # 預估賣出成本：500 股×52＝26000，手續費 37（26000×0.1425%＝37.05）、證交稅 78（0.3%）→ 115
+    assert h["0000"][12] == 115 and h["0000"][13] == 964.5 - 115
+    assert h["9999"][12] is None                             # 沒填現價：不估
     assert h["006208"][1] == 1000 and h["6208"][1] == 1000   # 006208 和 6208 不會混在一起
     assert h["0050"][7] == -3000 and h["0050"][11] == "賣出比買進多"
 

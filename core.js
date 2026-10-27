@@ -106,6 +106,7 @@ function holdings(trades, fees, prices = {}) {
     const code = String(t.code || "").trim(); if (!code) continue;
     if (!map.has(code)) map.set(code, { code, name: t.name || "", buyQty: 0, buyCost: 0, sellQty: 0, sellNet: 0 });
     const h = map.get(code); if (!h.name && t.name) h.name = t.name;
+    h.type = t.type;   // 預估賣出稅率用最後一筆的類型（股票／ETF／當沖）
     if (t.side === "買進") { h.buyQty += num(t.qty); h.buyCost += -c.net; } else { h.sellQty += num(t.qty); h.sellNet += c.net; }
   }
   return [...map.values()].map((h) => {
@@ -117,8 +118,13 @@ function holdings(trades, fees, prices = {}) {
     const mv = p > 0 ? p * Math.max(qty, 0) : null;
     const unreal = mv === null ? null : mv - cost;
     const ret = unreal === null || !cost ? null : unreal / cost;
+    // 假設現在就全部賣掉：再扣掉賣出的手續費和證交稅（跟多數券商 App 的「預估損益」同算法）
+    const est = mv !== null && qty > 0 ? tradeCalc({ side: "賣出", type: h.type, qty, price: p }, fees) : null;
+    const sellCost = est ? est.fee + est.tax : null;
+    const unrealNet = sellCost === null ? null : mv - sellCost - cost;
+    const retNet = unrealNet === null || !cost ? null : unrealNet / cost;
     const warn = qty < 0 ? "賣出比買進多" : "";
-    return Object.assign(h, { avg, qty, realized, cost, price: p > 0 ? p : null, mv, unreal, ret, warn });
+    return Object.assign(h, { avg, qty, realized, cost, price: p > 0 ? p : null, mv, unreal, ret, sellCost, unrealNet, retNet, warn });
   });
 }
 

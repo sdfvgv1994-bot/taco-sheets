@@ -187,12 +187,12 @@ function vStock() {
     <div class="stats" style="margin-bottom:10px"><div><small>已實現損益</small><strong class="${tw(sum("realized"))}">${fmt(sum("realized"))}</strong></div>
       <div><small>持股成本</small><strong>${fmt(sum("cost"))}</strong></div>
       <div><small>未實現損益</small><strong class="${tw(sum("unreal"))}">${H.some((h) => h.unreal !== null) ? fmt(sum("unreal")) : "—"}</strong></div></div>
-    ${H.length ? `<div class="tbl"><table><thead><tr><th>代號</th><th class="l">名稱</th><th>目前持股</th><th>平均成本</th><th>持股成本</th><th>現價（自己填）</th><th>市值</th><th>未實現</th><th>報酬率</th><th>已實現</th><th class="l">提醒</th></tr></thead><tbody>
+    ${H.length ? `<div class="tbl"><table><thead><tr><th>代號</th><th class="l">名稱</th><th>目前持股</th><th>平均成本</th><th>持股成本</th><th>現價（自己填）</th><th>市值</th><th>未實現</th><th>報酬率</th><th>扣賣出成本後</th><th>報酬率（扣後）</th><th>已實現</th><th class="l">提醒</th></tr></thead><tbody>
       ${H.map((h) => `<tr${h.warn ? ' style="background:var(--bad-bg)"' : ""}><td>${esc(h.code)}</td><td class="l">${esc(h.name)}</td><td class="${h.qty < 0 ? "neg" : ""}">${fmt(h.qty)}</td><td>${fmt2(h.avg)}</td><td>${fmt(h.cost)}</td>
         <td><input class="px" data-code="${esc(h.code)}" type="number" inputmode="decimal" step="any" min="0" value="${h.price ?? ""}" style="width:90px;padding:4px 6px" aria-label="${esc(h.code)} 現價"></td>
-        <td>${fmt(h.mv)}</td><td class="${tw(h.unreal)}">${fmt(h.unreal)}</td><td class="${tw(h.ret)}">${pct(h.ret)}</td><td class="${tw(h.realized)}">${fmt(h.realized)}</td><td class="l neg">${h.warn ? "⚠ " + h.warn : ""}</td></tr>`).join("")}
+        <td>${fmt(h.mv)}</td><td class="${tw(h.unreal)}">${fmt(h.unreal)}</td><td class="${tw(h.ret)}">${pct(h.ret)}</td><td class="${tw(h.unrealNet)}">${fmt(h.unrealNet)}</td><td class="${tw(h.retNet)}">${pct(h.retNet)}</td><td class="${tw(h.realized)}">${fmt(h.realized)}</td><td class="l neg">${h.warn ? "⚠ " + h.warn : ""}</td></tr>`).join("")}
     </tbody></table></div>
-    <p class="note">平均成本法（全部買進成本÷買進股數），跟券商算法可能有小差異；未實現損益沒扣賣出時的手續費和稅。只做計算，不是投資建議。</p>`
+    <p class="note">平均成本法（全部買進成本÷買進股數），跟券商算法可能有小差異；「未實現」沒扣賣出時的手續費和稅；「扣賣出成本後」假設現在全部賣掉，扣掉預估的手續費和證交稅，跟多數券商 App 的預估損益同算法。只做計算，不是投資建議。</p>`
       : '<p class="empty">還沒有交易。上面記一筆，彙總會自動出現</p>'}
   </div>
   <div class="card"><h3>交易紀錄（${list.length} 筆）</h3>
