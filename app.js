@@ -180,6 +180,8 @@ function vStock() {
       <label class="f">類型<select name="type">${opts(TYPES, e ? e.type : "股票")}</select></label>
       <label class="f">股數<input name="qty" type="number" inputmode="numeric" min="1" step="1" required placeholder="1 張＝1000" value="${esc(e ? e.qty : "")}"></label>
       <label class="f">成交價<input name="price" type="number" inputmode="decimal" min="0" step="any" required value="${esc(e ? e.price : "")}"></label>
+      <label class="f">手續費（選填，券商實收）<input name="feeFix" type="number" inputmode="decimal" min="0" step="any" placeholder="不填就照費率算" value="${esc(e && e.feeFix !== undefined ? e.feeFix : "")}"></label>
+      <label class="f">交易稅（選填，賣出才有）<input name="taxFix" type="number" inputmode="decimal" min="0" step="any" placeholder="不填就照費率算" value="${esc(e && e.taxFix !== undefined ? e.taxFix : "")}"></label>
     </div>
     <p class="note" id="tPreview">填好股數和成交價，這裡會先算給你看</p>
     <div class="row" style="margin-top:8px"><button class="main">${e ? "更新" : "加入"}</button>${e ? '<button type="button" id="tCancel">取消</button>' : ""}</div>
@@ -201,7 +203,7 @@ function vStock() {
   <div class="card"><h3>交易紀錄（${list.length} 筆）</h3>
     ${list.length ? `<div class="tbl"><table><thead><tr><th>日期</th><th class="l">代號</th><th class="l">買賣</th><th>股數</th><th>成交價</th><th>成交金額</th><th>手續費</th><th>交易稅</th><th>收付金額</th><th></th></tr></thead><tbody>
       ${list.map((t) => { const c = tradeCalc(t, F) || {}; return `<tr><td>${esc(t.date)}</td><td class="l">${esc(t.code)} ${esc(t.name || "")}</td><td class="l">${esc(t.side)}・${esc(t.type)}</td>
-        <td>${fmt(+t.qty)}</td><td>${fmt2(+t.price)}</td><td>${fmt(c.amount)}</td><td>${fmt(c.fee)}</td><td>${fmt(c.tax)}</td><td class="${tw(c.net)}">${fmt(c.net)}</td>
+        <td>${fmt(+t.qty)}</td><td>${fmt2(+t.price)}</td><td>${fmt(c.amount)}</td><td>${fmt(c.fee)}${t.feeFix !== undefined ? "*" : ""}</td><td>${fmt(c.tax)}${t.taxFix !== undefined ? "*" : ""}</td><td class="${tw(c.net)}">${fmt(c.net)}</td>
         <td><button class="sm" data-et="${esc(t.id)}">改</button> <button class="sm danger" data-dt="${esc(t.id)}">刪</button></td></tr>`; }).join("")}
     </tbody></table></div>` : '<p class="empty">還沒有交易</p>'}
   </div>
@@ -228,6 +230,7 @@ function vStock() {
       <label class="f">證交稅：當沖（%）${pctIn("taxDay", F.taxDay)}</label>
       <div class="row" style="grid-column:1/-1"><button class="main">儲存費率</button><button type="button" id="feeReset">回到預設</button></div>
     </form>
+    <p class="note">每筆交易也可以自己填「手續費」「交易稅」（照成交單抄），填了那一筆就用你填的數字，列表上會標＊；不填就用這裡的費率算。</p>
     <p class="note">預設：手續費上限 0.1425%、整股最低 20 元（零股依券商）；證交稅賣出才收，股票 0.3%、ETF 0.1%、現股當沖 0.15%（減半實施到 2027/12/31）。ETF 當沖請選「ETF」。</p>
   </details>`;
 }
@@ -235,11 +238,11 @@ function bindStock() {
   const f = $("fT"), F = D.settings.fees;
   const preview = () => {
     const side = f.querySelector('[data-side][aria-pressed="true"]').dataset.side;
-    const c = tradeCalc({ side, type: f.type.value, qty: f.qty.value, price: f.price.value }, F);
+    const c = tradeCalc({ side, type: f.type.value, qty: f.qty.value, price: f.price.value, feeFix: f.feeFix.value, taxFix: f.taxFix.value }, F);
     $("tPreview").textContent = c ? `成交金額 ${fmt(c.amount)}・手續費 ${fmt(c.fee)}・交易稅 ${fmt(c.tax)}・${side === "買進" ? "要付" : "會拿到"} ${fmt(Math.abs(c.net))} 元` : "填好股數和成交價，這裡會先算給你看";
   };
   f.querySelectorAll("[data-side]").forEach((b) => b.onclick = () => { ui.side = b.dataset.side; f.querySelectorAll("[data-side]").forEach((x) => x.setAttribute("aria-pressed", String(x === b))); preview(); });
-  ["qty", "price", "type"].forEach((n) => f[n].addEventListener("input", preview));
+  ["qty", "price", "type", "feeFix", "taxFix"].forEach((n) => f[n].addEventListener("input", preview));
   f.code.addEventListener("change", () => { const old = D.trades.find((t) => t.code === f.code.value.trim() && t.name); if (old && !f.name.value) f.name.value = old.name; });
   preview();
   f.onsubmit = (ev) => {
@@ -248,7 +251,10 @@ function bindStock() {
     const rec = { date: f.date.value, code: f.code.value.trim(), name: f.name.value.trim(), side, type: f.type.value, qty: parseInt(f.qty.value, 10), price: parseFloat(f.price.value) };
     if (!isDate(rec.date) || !rec.code) return toast("請填日期和代號");
     if (!tradeCalc(rec, F)) return toast("股數、成交價請填正數");
-    if (ui.editT) { Object.assign(D.trades.find((x) => x.id === ui.editT), rec); ui.editT = null; toast("已更新"); }
+    const fx = parseFloat(f.feeFix.value), tx = parseFloat(f.taxFix.value);
+    if (f.feeFix.value.trim() !== "" && !(fx >= 0) || f.taxFix.value.trim() !== "" && !(tx >= 0)) return toast("手續費、交易稅請填 0 以上的數字");
+    if (fx >= 0) rec.feeFix = fx; if (tx >= 0) rec.taxFix = tx;
+    if (ui.editT) { const old = D.trades.find((x) => x.id === ui.editT); delete old.feeFix; delete old.taxFix; Object.assign(old, rec); ui.editT = null; toast("已更新"); }
     else { D.trades.push(Object.assign({ id: nextId() }, rec)); toast(`已記下：${side} ${rec.code} ${fmt(rec.qty)} 股`); }
     ui.side = "買進"; save(); render();   // 下一筆回到「買進」，免得連續記錯方向
   };

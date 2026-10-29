@@ -41,6 +41,7 @@ function normalize(d) {
   }
   for (const k of ["budget", "trades", "divs", "todos"]) for (const x of out[k]) if (!x.id) { x.id = ++maxId; used.add(x.id); }
   out.seq = Math.max(Number(out.seq) || 1, maxId + 1);
+  for (const t of out.trades) for (const k of ["feeFix", "taxFix"]) if (k in t) { const v = Number(t[k]); if (t[k] === null || t[k] === "" || !isFinite(v) || v < 0) delete t[k]; else t[k] = v; }
   out.divs = out.divs.filter((x) => typeof x.code === "string" && x.code.trim()).map((x) => {
     const cash = Number(x.cash), shares = Math.floor(Number(x.shares));
     return Object.assign(x, { cash: isFinite(cash) && cash > 0 ? cash : 0, shares: isFinite(shares) && shares > 0 ? shares : 0 });
@@ -96,9 +97,12 @@ function tradeCalc(t, fees) {
   const qty = num(t.qty), price = num(t.price);
   if (!(qty > 0) || !(price > 0) || (t.side !== "買進" && t.side !== "賣出")) return null;
   const amount = qty * price;
-  const fee = Math.max(fees.min, floor(amount * fees.rate * fees.disc));
+  // 單筆可以直接填券商成交單上的實收手續費、交易稅（feeFix／taxFix）；沒填就照費率算
+  const fix = (v) => (v === undefined || v === null || v === "" ? null : (num(v) >= 0 ? num(v) : null));
+  const feeFix = fix(t.feeFix), taxFix = fix(t.taxFix);
+  const fee = feeFix !== null ? feeFix : Math.max(fees.min, floor(amount * fees.rate * fees.disc));
   const taxRate = t.type === "ETF" ? fees.taxEtf : t.type === "當沖" ? fees.taxDay : fees.taxStock;
-  const tax = t.side === "賣出" ? floor(amount * taxRate) : 0;
+  const tax = t.side === "賣出" ? (taxFix !== null ? taxFix : floor(amount * taxRate)) : 0;
   const net = t.side === "買進" ? -(amount + fee) : amount - fee - tax;
   return { amount, fee, tax, net };
 }
