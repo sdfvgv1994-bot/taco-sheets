@@ -15,7 +15,7 @@ const PRIORITIES = ["高", "中", "低"];
 const clone = (o) => JSON.parse(JSON.stringify(o));
 
 function newData() {
-  return { app: "taco-sheets", v: 1, budget: [], trades: [], prices: {}, todos: [], table: "", settings: clone(DEFAULTS), seq: 1 };
+  return { app: "taco-sheets", v: 1, budget: [], trades: [], divs: [], prices: {}, todos: [], table: "", settings: clone(DEFAULTS), seq: 1 };
 }
 /* 舊資料或備份碼缺欄位時補齊 */
 function normalize(d) {
@@ -35,12 +35,16 @@ function normalize(d) {
   // 紀錄：只留物件；id 一律是正整數、不重複，seq 接在最大 id 後面（避免改過的備份碼塞奇怪的 id）
   let maxId = 0;
   const used = new Set();
-  for (const k of ["budget", "trades", "todos"]) {
+  for (const k of ["budget", "trades", "divs", "todos"]) {
     out[k] = (Array.isArray(out[k]) ? out[k] : []).filter((x) => x && typeof x === "object" && !Array.isArray(x)).map((x) => Object.assign({}, x));
     for (const x of out[k]) { const id = Number(x.id); x.id = Number.isInteger(id) && id > 0 && !used.has(id) ? id : 0; if (x.id) { used.add(x.id); maxId = Math.max(maxId, x.id); } }
   }
-  for (const k of ["budget", "trades", "todos"]) for (const x of out[k]) if (!x.id) { x.id = ++maxId; used.add(x.id); }
+  for (const k of ["budget", "trades", "divs", "todos"]) for (const x of out[k]) if (!x.id) { x.id = ++maxId; used.add(x.id); }
   out.seq = Math.max(Number(out.seq) || 1, maxId + 1);
+  out.divs = out.divs.filter((x) => typeof x.code === "string" && x.code.trim()).map((x) => {
+    const cash = Number(x.cash), shares = Math.floor(Number(x.shares));
+    return Object.assign(x, { cash: isFinite(cash) && cash > 0 ? cash : 0, shares: isFinite(shares) && shares > 0 ? shares : 0 });
+  });
   const prices = {};
   if (out.prices && typeof out.prices === "object") for (const [c, v] of Object.entries(out.prices)) if (Number(v) > 0) prices[c] = Number(v);
   out.prices = prices;
@@ -99,7 +103,7 @@ function tradeCalc(t, fees) {
   return { amount, fee, tax, net };
 }
 /* 持股彙總（平均成本法）：代號照字面比對，006208 和 6208 是不同檔 */
-function holdings(trades, fees, prices = {}) {
+function holdings(trades, fees, prices = {}, divs = []) {
   const map = new Map();
   for (const t of trades) {
     const c = tradeCalc(t, fees); if (!c) continue;
@@ -109,9 +113,16 @@ function holdings(trades, fees, prices = {}) {
     h.type = t.type;   // 預估賣出稅率用最後一筆的類型（股票／ETF／當沖）
     if (t.side === "買進") { h.buyQty += num(t.qty); h.buyCost += -c.net; } else { h.sellQty += num(t.qty); h.sellNet += c.net; }
   }
+  // 股息：現金股利是直接收到的錢；股票股利（配股）多出股數、成本不變，所以平均成本會變低
+  for (const d of divs) {
+    const code = String(d.code || "").trim(); if (!code) continue;
+    if (!map.has(code)) map.set(code, { code, name: d.name || "", buyQty: 0, buyCost: 0, sellQty: 0, sellNet: 0 });
+    const h = map.get(code); h.divCash = (h.divCash || 0) + (num(d.cash) > 0 ? num(d.cash) : 0); h.divShares = (h.divShares || 0) + (num(d.shares) > 0 ? Math.floor(num(d.shares)) : 0);
+  }
   return [...map.values()].map((h) => {
-    const avg = h.buyQty ? h.buyCost / h.buyQty : 0;
-    const qty = h.buyQty - h.sellQty;
+    h.divCash = h.divCash || 0; h.divShares = h.divShares || 0;
+    const avg = h.buyQty + h.divShares ? h.buyCost / (h.buyQty + h.divShares) : 0;
+    const qty = h.buyQty + h.divShares - h.sellQty;
     const realized = h.sellNet - avg * h.sellQty;
     const cost = avg * Math.max(qty, 0);
     const p = num(prices[h.code]);
@@ -123,8 +134,10 @@ function holdings(trades, fees, prices = {}) {
     const sellCost = est ? est.fee + est.tax : null;
     const unrealNet = sellCost === null ? null : mv - sellCost - cost;
     const retNet = unrealNet === null || !cost ? null : unrealNet / cost;
+    const unrealDiv = unreal === null ? null : unreal + h.divCash;          // 含息：價差加上領到的現金股利
+    const retDiv = unrealDiv === null || !cost ? null : unrealDiv / cost;
     const warn = qty < 0 ? "賣出比買進多" : "";
-    return Object.assign(h, { avg, qty, realized, cost, price: p > 0 ? p : null, mv, unreal, ret, sellCost, unrealNet, retNet, warn });
+    return Object.assign(h, { avg, qty, realized, cost, price: p > 0 ? p : null, mv, unreal, ret, sellCost, unrealNet, retNet, unrealDiv, retDiv, warn });
   });
 }
 

@@ -184,3 +184,28 @@ def test_offline_home_not_overwritten():
     for f in re.findall(r'<script src="([^"]+)"', html) + re.findall(r'<link rel="stylesheet" href="([^"]+)"', html):
         if not f.startswith("http"):
             assert '"./' + f + '"' in core, f
+
+
+def test_dividends_cash_and_stock():
+    """股息：現金股利直接進含息損益；配股多股數、成本不變（平均成本變低）；壞資料會被清掉。"""
+    out = node("""
+    const f=c.DEFAULTS.fees;
+    const T=[{code:"2801",side:"買進",type:"股票",qty:1000,price:20}];
+    const D=[{code:"2801",date:"2026-08-01",cash:800,shares:25},{code:"2801",cash:-5,shares:"x"}];
+    const H=c.holdings(T,f,{"2801":30},D)[0], H0=c.holdings(T,f,{"2801":30})[0];
+    const Hs=c.holdings(T.concat([{code:"2801",side:"賣出",type:"股票",qty:1025,price:30}]),f,{},D)[0];
+    const N=c.normalize({divs:[{code:"2801",cash:"abc",shares:2.9},null,5,{cash:3},{code:"2801",cash:-1,shares:-1}],trades:[{id:5}]});
+    console.log(JSON.stringify({H:[H.qty,H.avg,H.cost,H.mv,H.unreal,H.divCash,H.divShares,H.unrealDiv,H.retDiv],H0:[H0.qty,H0.avg,H0.divCash,H0.unrealDiv],
+      S:[Hs.qty,Hs.realized],N:N.divs,seq:N.seq}));""")
+    if out is None:
+        return
+    h = out["H"]
+    assert h[0] == 1025 and abs(h[1] - 20028 / 1025) < 1e-9 and h[2] == 20028      # 配股不加成本
+    assert h[3] == 30750 and h[4] == 10722 and h[5] == 800 and h[6] == 25
+    assert h[7] == 11522 and abs(h[8] - 11522 / 20028) < 1e-12                     # 含息＝價差＋現金股利
+    assert out["H0"] == [1000, 20.028, 0, 9972]                                    # 沒傳股息：跟以前一模一樣
+    # 全賣掉：賣 1025 股，收 30750-手續費-稅；平均成本已因配股變低
+    assert out["S"][0] == 0
+    assert out["N"] == [{"code": "2801", "cash": 0, "shares": 2, "id": out["N"][0]["id"]},
+                        {"code": "2801", "cash": 0, "shares": 0, "id": out["N"][1]["id"]}]
+    assert out["N"][0]["id"] != out["N"][1]["id"] and out["seq"] > max(5, out["N"][0]["id"], out["N"][1]["id"])

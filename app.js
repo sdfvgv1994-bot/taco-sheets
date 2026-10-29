@@ -64,7 +64,7 @@ const legend = (items) => `<div class="legend">${items.map(([n, c]) => `<span><i
 function vHome() {
   const t = today(), y = +t.slice(0, 4), m = +t.slice(5, 7);
   const mon = budgetMonthly(D.budget, y).rows[m - 1];
-  const H = holdings(D.trades, D.settings.fees, D.prices);
+  const H = holdings(D.trades, D.settings.fees, D.prices, D.divs);
   const real = H.reduce((a, h) => a + h.realized, 0);
   const s = todoStats(D.todos, t);
   const tbl = parseTable(D.table), nc = numericCols(tbl);
@@ -163,9 +163,10 @@ function bindBudget() {
 const TYPES = ["股票", "ETF", "當沖"];
 function vStock() {
   const F = D.settings.fees, e = ui.editT ? D.trades.find((x) => x.id === ui.editT) : null, side = e ? e.side : ui.side;
-  const H = holdings(D.trades, F, D.prices);
+  const H = holdings(D.trades, F, D.prices, D.divs);
   const sum = (k) => H.reduce((a, h) => a + (h[k] || 0), 0);
   const codes = [...new Set(D.trades.map((t) => t.code))];
+  const divList = D.divs.slice().sort((a, b) => (b.date || "").localeCompare(a.date || "") || b.id - a.id);
   const list = D.trades.slice().sort((a, b) => (b.date || "").localeCompare(a.date || "") || b.id - a.id);
   const pctIn = (name, v) => `<input name="${name}" type="number" inputmode="decimal" step="any" min="0" value="${esc(+(v * 100).toFixed(6))}">`;
   return `<h2>📈 股票交易紀錄</h2>
@@ -186,13 +187,15 @@ function vStock() {
   <div class="card"><h3>持股彙總（自動）</h3>
     <div class="stats" style="margin-bottom:10px"><div><small>已實現損益</small><strong class="${tw(sum("realized"))}">${fmt(sum("realized"))}</strong></div>
       <div><small>持股成本</small><strong>${fmt(sum("cost"))}</strong></div>
-      <div><small>未實現損益</small><strong class="${tw(sum("unreal"))}">${H.some((h) => h.unreal !== null) ? fmt(sum("unreal")) : "—"}</strong></div></div>
-    ${H.length ? `<div class="tbl"><table><thead><tr><th>代號</th><th class="l">名稱</th><th>目前持股</th><th>平均成本</th><th>持股成本</th><th>現價（自己填）</th><th>市值</th><th>未實現</th><th>報酬率</th><th>扣賣出成本後</th><th>報酬率（扣後）</th><th>已實現</th><th class="l">提醒</th></tr></thead><tbody>
+      <div><small>未實現損益</small><strong class="${tw(sum("unreal"))}">${H.some((h) => h.unreal !== null) ? fmt(sum("unreal")) : "—"}</strong></div>
+      ${D.divs.length ? `<div><small>領到現金股利</small><strong class="${tw(sum("divCash"))}">${fmt(sum("divCash"))}</strong></div>
+      <div><small>含息損益</small><strong class="${tw(sum("unrealDiv"))}">${H.some((h) => h.unrealDiv !== null) ? fmt(sum("unrealDiv")) : "—"}</strong></div>` : ""}</div>
+    ${H.length ? `<div class="tbl"><table><thead><tr><th>代號</th><th class="l">名稱</th><th>目前持股</th><th>平均成本</th><th>持股成本</th><th>現價（自己填）</th><th>市值</th><th>未實現</th><th>報酬率</th><th>扣賣出成本後</th><th>報酬率（扣後）</th>${D.divs.length ? "<th>現金股利</th><th>含息損益</th><th>含息報酬率</th>" : ""}<th>已實現</th><th class="l">提醒</th></tr></thead><tbody>
       ${H.map((h) => `<tr${h.warn ? ' style="background:var(--bad-bg)"' : ""}><td>${esc(h.code)}</td><td class="l">${esc(h.name)}</td><td class="${h.qty < 0 ? "neg" : ""}">${fmt(h.qty)}</td><td>${fmt2(h.avg)}</td><td>${fmt(h.cost)}</td>
         <td><input class="px" data-code="${esc(h.code)}" type="number" inputmode="decimal" step="any" min="0" value="${h.price ?? ""}" style="width:90px;padding:4px 6px" aria-label="${esc(h.code)} 現價"></td>
-        <td>${fmt(h.mv)}</td><td class="${tw(h.unreal)}">${fmt(h.unreal)}</td><td class="${tw(h.ret)}">${pct(h.ret)}</td><td class="${tw(h.unrealNet)}">${fmt(h.unrealNet)}</td><td class="${tw(h.retNet)}">${pct(h.retNet)}</td><td class="${tw(h.realized)}">${fmt(h.realized)}</td><td class="l neg">${h.warn ? "⚠ " + h.warn : ""}</td></tr>`).join("")}
+        <td>${fmt(h.mv)}</td><td class="${tw(h.unreal)}">${fmt(h.unreal)}</td><td class="${tw(h.ret)}">${pct(h.ret)}</td><td class="${tw(h.unrealNet)}">${fmt(h.unrealNet)}</td><td class="${tw(h.retNet)}">${pct(h.retNet)}</td>${D.divs.length ? `<td>${fmt(h.divCash)}</td><td class="${tw(h.unrealDiv)}">${fmt(h.unrealDiv)}</td><td class="${tw(h.retDiv)}">${pct(h.retDiv)}</td>` : ""}<td class="${tw(h.realized)}">${fmt(h.realized)}</td><td class="l neg">${h.warn ? "⚠ " + h.warn : ""}</td></tr>`).join("")}
     </tbody></table></div>
-    <p class="note">平均成本法（全部買進成本÷買進股數），跟券商算法可能有小差異；「未實現」沒扣賣出時的手續費和稅；「扣賣出成本後」假設現在全部賣掉，扣掉預估的手續費和證交稅，跟多數券商 App 的預估損益同算法。只做計算，不是投資建議。</p>`
+    <p class="note">平均成本法（全部買進成本÷買進股數），跟券商算法可能有小差異；「未實現」沒扣賣出時的手續費和稅；「扣賣出成本後」假設現在全部賣掉，扣掉預估的手續費和證交稅，跟多數券商 App 的預估損益同算法。「含息」是把領到的現金股利加進未實現損益（要先在下面「股息」記一筆）；配股會增加股數、不增加成本，所以平均成本會變低。只做計算，不是投資建議。</p>`
       : '<p class="empty">還沒有交易。上面記一筆，彙總會自動出現</p>'}
   </div>
   <div class="card"><h3>交易紀錄（${list.length} 筆）</h3>
@@ -202,6 +205,19 @@ function vStock() {
         <td><button class="sm" data-et="${esc(t.id)}">改</button> <button class="sm danger" data-dt="${esc(t.id)}">刪</button></td></tr>`; }).join("")}
     </tbody></table></div>` : '<p class="empty">還沒有交易</p>'}
   </div>
+  <form class="card" id="fD" autocomplete="off"><h3>記股息（現金股利、配股）</h3>
+    <div class="grid">
+      <label class="f">日期<input type="date" name="date" required value="${esc(today())}"></label>
+      <label class="f">代號<input name="code" required list="codes" placeholder="例如 2801"></label>
+      <label class="f">現金股利（實拿的錢）<input name="cash" type="number" inputmode="decimal" min="0" step="any" placeholder="0"></label>
+      <label class="f">配股（股數）<input name="shares" type="number" inputmode="numeric" min="0" step="1" placeholder="0"></label>
+    </div>
+    <p class="note">現金股利填你戶頭<b>實際收到</b>的金額（已扣二代健保、匯費）。配股填多出幾股，這幾股成本算 0，所以平均成本會變低。上面「記一筆交易」只記你自己買賣的股數，<b>配股不要重複記進去</b>。</p>
+    <div class="row" style="margin-top:8px"><button class="main">記下股息</button></div>
+    ${divList.length ? `<div class="tbl" style="margin-top:10px"><table><thead><tr><th>日期</th><th class="l">代號</th><th>現金股利</th><th>配股</th><th></th></tr></thead><tbody>
+      ${divList.map((d) => `<tr><td>${esc(d.date)}</td><td class="l">${esc(d.code)}</td><td>${fmt(d.cash)}</td><td>${fmt(d.shares)}</td><td><button type="button" class="sm danger" data-dd="${esc(d.id)}">刪</button></td></tr>`).join("")}
+    </tbody></table></div>` : ""}
+  </form>
   <details class="card" id="feeBox"><summary>費用與稅率（依你的券商調整）</summary>
     <form id="fF" class="grid" style="margin-top:10px">
       <label class="f">手續費率（%）${pctIn("rate", F.rate)}</label>
@@ -244,6 +260,19 @@ function bindStock() {
   document.querySelectorAll("[data-dt]").forEach((b) => b.onclick = () => {
     if (!confirm("刪掉這筆交易？")) return;
     D.trades = D.trades.filter((x) => x.id !== +b.dataset.dt); if (ui.editT === +b.dataset.dt) ui.editT = null; save(); render();
+  });
+  const fd = $("fD");
+  fd.onsubmit = (ev) => {
+    ev.preventDefault();
+    const rec = { date: fd.date.value, code: fd.code.value.trim(), cash: parseFloat(fd.cash.value) || 0, shares: parseInt(fd.shares.value, 10) || 0 };
+    if (!isDate(rec.date) || !rec.code) return toast("請填日期和代號");
+    if (!(rec.cash > 0) && !(rec.shares > 0)) return toast("現金股利或配股至少填一個");
+    if (rec.cash < 0 || rec.shares < 0) return toast("請填 0 以上的數字");
+    D.divs.push(Object.assign({ id: nextId() }, rec)); save(); render(); toast(`已記下股息：${rec.code}`);
+  };
+  document.querySelectorAll("[data-dd]").forEach((b) => b.onclick = () => {
+    if (!confirm("刪掉這筆股息？")) return;
+    D.divs = D.divs.filter((x) => x.id !== +b.dataset.dd); save(); render();
   });
   const ff = $("fF");
   ff.onsubmit = (ev) => {
@@ -388,7 +417,7 @@ function bindAnalysis() {
 /* ======================= 設定 ======================= */
 function vSettings() {
   const ta = (id, label, list) => `<label class="f">${label}<textarea id="${id}" rows="6">${esc(list.join("\n"))}</textarea></label>`;
-  const n = D.budget.length + D.trades.length + D.todos.length;
+  const n = D.budget.length + D.trades.length + D.divs.length + D.todos.length;
   return `<h2>⚙️ 設定</h2>
   <div class="card"><h3>下拉選單的選項</h3><p class="note" style="margin:0 0 8px">一行一個。改名不會改到已經記的資料。</p>
     <div class="grid">${ta("sIncome", "收入類別", D.settings.income)}${ta("sExpense", "支出類別", D.settings.expense)}${ta("sPay", "付款方式", D.settings.pay)}${ta("sTodo", "清單分類", D.settings.todoCats)}</div>
@@ -417,7 +446,7 @@ function bindSettings() {
   $("bImport").onclick = () => {
     const d = importCode($("bIn").value);
     if (!d) return toast("看不懂這個備份碼（要整段完整貼上）");
-    if (!confirm(`匯入會取代這台裝置的全部資料（記帳 ${d.budget.length}、交易 ${d.trades.length}、清單 ${d.todos.length} 筆），確定？`)) return;
+    if (!confirm(`匯入會取代這台裝置的全部資料（記帳 ${d.budget.length}、交易 ${d.trades.length}、股息 ${d.divs.length}、清單 ${d.todos.length} 筆），確定？`)) return;
     D = d; save(); render(); toast("匯入完成");
   };
   $("wipe").onclick = () => {
