@@ -221,12 +221,14 @@ def test_per_trade_fee_override():
     const S={side:"賣出",type:"ETF",qty:232,price:32.23};
     const S0=c.tradeCalc(S,f), S1=c.tradeCalc(Object.assign({feeFix:2,taxFix:7},S),f), Sb=c.tradeCalc(Object.assign({},S,{side:"買進",taxFix:9}),f);
     const H=c.holdings([Object.assign({code:"2801",feeFix:8},base)],f,{})[0];
+    const O=c.tradeCalc({side:"買進",type:"股票",qty:1,price:27.85,feeFix:1},f);
     const N=c.normalize({trades:[{code:"1",feeFix:"x",taxFix:"4"},{code:"2",feeFix:null}]}).trades;
-    console.log(JSON.stringify({A:[A.fee,A.net],B:[B.fee,B.net],Z:[Z.fee],bad:[bad.fee,bad.tax],blank:[blank.fee],S0:[S0.fee,S0.tax],S1:[S1.fee,S1.tax,S1.net],Sb:[Sb.tax],H:[H.buyCost],N:N.map(t=>[t.feeFix,t.taxFix])}));""")
+    console.log(JSON.stringify({A:[A.fee,A.net],B:[B.fee,B.net],Z:[Z.fee],bad:[bad.fee,bad.tax],blank:[blank.fee],S0:[S0.fee,S0.tax],S1:[S1.fee,S1.tax,S1.net],Sb:[Sb.tax],H:[H.buyCost],O:[O.amount,O.net],N:N.map(t=>[t.feeFix,t.taxFix])}));""")
     if out is None:
         return
     assert out["A"][0] == 29 and out["B"] == [5, -(20450 + 5)] and out["Z"] == [0]   # 填 0 也算填
     assert out["bad"] == [29, 0] and out["blank"] == [29]                              # 壞值、空白＝沒填
-    assert out["S0"][1] == 7 and out["S1"][:2] == [2, 7] and abs(out["S1"][2] - (7477.36 - 9)) < 1e-6 and out["Sb"] == [0]  # 買進不收稅，填了也不算
+    assert out["S0"][1] == 7 and out["S1"][:2] == [2, 7] and out["S1"][2] == 7477 - 9 and out["Sb"] == [0]  # 買進不收稅，填了也不算
     assert out["H"] == [20458]                                                           # 持股成本用填的手續費 8
     assert out["N"] == [[None, 4], [None, None]]
+    assert out["O"] == [27, -28]                                                         # 成交金額捨去小數，跟國泰成交單一樣

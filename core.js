@@ -96,7 +96,7 @@ const floor = (v) => Math.floor(v + 1e-9);   // 0.1425% 這種費率乘出來會
 function tradeCalc(t, fees) {
   const qty = num(t.qty), price = num(t.price);
   if (!(qty > 0) || !(price > 0) || (t.side !== "買進" && t.side !== "賣出")) return null;
-  const amount = qty * price;
+  const amount = floor(qty * price);   // 券商成交單的「成交金額」會把小數捨去（1 股 × 27.85 ＝ 27）
   // 單筆可以直接填券商成交單上的實收手續費、交易稅（feeFix／taxFix）；沒填就照費率算
   const fix = (v) => (v === undefined || v === null || v === "" ? null : (num(v) >= 0 ? num(v) : null));
   const feeFix = fix(t.feeFix), taxFix = fix(t.taxFix);
