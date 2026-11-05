@@ -50,6 +50,7 @@ function normalize(d) {
   if (out.prices && typeof out.prices === "object") for (const [c, v] of Object.entries(out.prices)) if (Number(v) > 0) prices[c] = Number(v);
   out.prices = prices;
   if (typeof out.table !== "string") out.table = "";
+  const up = Number(d.updatedAt); out.updatedAt = isFinite(up) && up > 0 ? up : 0;   // 最後修改時間（雲端同步比新舊用）
   return out;
 }
 
@@ -245,5 +246,18 @@ function importCode(text) {
   return normalize(d);
 }
 
+/* ---------- 雲端同步：這台和雲端，哪一份比較新 ---------- */
+const countRecords = (d) => (d ? ["budget", "trades", "divs", "todos"].reduce((n, k) => n + (Array.isArray(d[k]) ? d[k].length : 0), 0) + (d.table ? 1 : 0) : 0);
+/* 回傳 "push"（這台上傳）、"pull"（拿雲端的）、"same"（一樣，不用動）。
+   新裝置（這台沒資料）一律拿雲端的，免得空資料蓋掉雲端。 */
+function syncPick(local, cloud) {
+  const lt = (local && Number(local.updatedAt)) || 0, ct = (cloud && Number(cloud.updatedAt)) || 0;
+  if (!cloud) return countRecords(local) || lt ? "push" : "same";
+  if (!countRecords(local) && countRecords(cloud)) return "pull";
+  if (ct > lt) return "pull";
+  if (lt > ct) return "push";
+  return "same";
+}
+
 if (typeof module !== "undefined") module.exports = { DEFAULTS, TODO_STATES, PRIORITIES, newData, normalize, todayStr, isDate, budgetMonthly, budgetByCategory,
-  tradeCalc, holdings, daysLeft, todoStats, parseTable, numericCols, colNums, quantile, describe, correl, histogram, groupBy, exportCode, importCode };
+  tradeCalc, holdings, daysLeft, todoStats, parseTable, numericCols, colNums, quantile, describe, correl, histogram, groupBy, exportCode, importCode, countRecords, syncPick };

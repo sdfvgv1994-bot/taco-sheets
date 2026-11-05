@@ -13,9 +13,19 @@ function load() {
 }
 let saveOk = true;
 function save() {
+  D.updatedAt = Date.now();   // 記下最後修改時間，雲端同步靠這個比新舊
   try { localStorage.setItem(KEY, JSON.stringify(D)); saveOk = true; }
   catch (e) { if (saveOk) toast("這個瀏覽器不讓網站存資料（無痕模式？）：關掉網頁資料就不見了"); saveOk = false; }
+  if (window.tacoSync) window.tacoSync.changed();   // 有登入就上傳到雲端（sync.js）
 }
+/* 換成雲端那一份：這台原本的資料先另外備份一份（taco-sheets-v1-backup），不會直接丟掉 */
+function replaceData(d) {
+  try { const old = localStorage.getItem(KEY); if (old) localStorage.setItem(KEY + "-backup", JSON.stringify({ at: Date.now(), data: old })); } catch (e) { /* 存不下就算了 */ }
+  D = normalize(d);
+  try { localStorage.setItem(KEY, JSON.stringify(D)); } catch (e) { /* 同上 */ }
+  render();
+}
+window.tacoApp = { get: () => D, replace: replaceData, toast, render };
 const nextId = () => D.seq++;
 
 /* ---------- 小工具 ---------- */
@@ -425,11 +435,12 @@ function vSettings() {
   const ta = (id, label, list) => `<label class="f">${label}<textarea id="${id}" rows="6">${esc(list.join("\n"))}</textarea></label>`;
   const n = D.budget.length + D.trades.length + D.divs.length + D.todos.length;
   return `<h2>⚙️ 設定</h2>
+  <div class="card" id="syncCard"><h3>☁️ 雲端同步</h3><p class="note" style="margin:0">雲端功能載入中…</p></div>
   <div class="card"><h3>下拉選單的選項</h3><p class="note" style="margin:0 0 8px">一行一個。改名不會改到已經記的資料。</p>
     <div class="grid">${ta("sIncome", "收入類別", D.settings.income)}${ta("sExpense", "支出類別", D.settings.expense)}${ta("sPay", "付款方式", D.settings.pay)}${ta("sTodo", "清單分類", D.settings.todoCats)}</div>
     <div class="row" style="margin-top:10px"><button class="main" id="sSave">儲存選項</button><button id="sReset">回到預設</button></div></div>
   <div class="card"><h3>備份／搬到另一台裝置</h3>
-    <p class="note" style="margin:0 0 8px">資料只存在這台裝置的瀏覽器（目前 ${n} 筆紀錄）。清除瀏覽器資料就會不見，建議偶爾備份一次。</p>
+    <p class="note" style="margin:0 0 8px">目前 ${n} 筆紀錄。沒登入雲端同步時，資料只存在這台裝置的瀏覽器，清除瀏覽器資料就會不見，建議偶爾備份一次。</p>
     <div class="row"><button class="main" id="bCopy">複製備份碼</button><span class="note" style="margin:0">複製後貼到 LINE 給自己、或存在記事本</span></div>
     <label class="f" style="margin-top:12px">匯入備份碼（會<b>取代</b>這台裝置的全部資料）<textarea id="bIn" rows="3" placeholder="把備份碼貼在這裡"></textarea></label>
     <div class="row" style="margin-top:8px"><button id="bImport">匯入</button></div></div>
@@ -437,6 +448,7 @@ function vSettings() {
     <button class="danger" id="wipe">清除全部資料</button></div>`;
 }
 function bindSettings() {
+  if (window.tacoSync) window.tacoSync.paint();
   const lines = (id) => [...new Set($(id).value.split("\n").map((s) => s.trim()).filter(Boolean))];
   $("sSave").onclick = () => {
     const s = { income: lines("sIncome"), expense: lines("sExpense"), pay: lines("sPay"), todoCats: lines("sTodo") };

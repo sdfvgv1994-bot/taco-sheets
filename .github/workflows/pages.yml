@@ -39,8 +39,8 @@ jobs:
       - name: 加上版本號
         run: |
           v="${GITHUB_SHA::7}"
-          mkdir -p site && cp index.html core.js app.js sw.js manifest.json *.png site/
-          sed -i -E "s#src=\"(core|app)\.js\"#src=\"\1.js?v=$v\"#g" site/index.html
+          mkdir -p site && cp index.html core.js app.js sync.js sw.js manifest.json *.png site/
+          sed -i -E "s#src=\"(core|app|sync)\.js\"#src=\"\1.js?v=$v\"#g" site/index.html
           grep -c "?v=$v" site/index.html
           sed -i "s#name=\"app-version\" content=\"dev\"#name=\"app-version\" content=\"$v\"#" site/index.html
           sed -i "s#name=\"app-built\" content=\"\"#name=\"app-built\" content=\"$(TZ=Asia/Taipei date '+%m/%d %H:%M')\"#" site/index.html
