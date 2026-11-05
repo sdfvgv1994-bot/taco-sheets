@@ -135,7 +135,7 @@ def test_app_files():
     for i in m["icons"]:
         assert (ROOT / i["src"]).is_file(), i["src"]
     html = (ROOT / "index.html").read_text(encoding="utf-8")
-    assert re.findall(r'<script src="([^"]+)"', html) == ["core.js", "app.js"]
+    assert re.findall(r'<script src="([^"]+)"', html) == ["core.js", "app.js", "sync.js"]
     assert '<meta name="app-version" content="dev">' in html and re.search(r"\[hidden\]\{display:none!important\}", html)
     assert (ROOT / "sw.js").is_file()
     assert "site/index.html" in (ROOT / ".github" / "workflows" / "pages.yml").read_text(encoding="utf-8")
@@ -232,3 +232,36 @@ def test_per_trade_fee_override():
     assert out["H"] == [20458]                                                           # 持股成本用填的手續費 8
     assert out["N"] == [[None, 4], [None, None]]
     assert out["O"] == [27, -28]                                                         # 成交金額捨去小數，跟國泰成交單一樣
+
+
+def test_cloud_sync_pick():
+    """雲端同步：比新舊決定上傳還是下載；新裝置（沒資料）一律拿雲端的，空資料不能蓋掉雲端。"""
+    out = node("""
+    const rec={budget:[{id:1}]}, A=(o)=>Object.assign({},rec,o);
+    const r=[
+      c.syncPick(A({updatedAt:5}),null),                 // 雲端還沒有：上傳
+      c.syncPick({budget:[]},null),                      // 雲端沒有、這台也空：不動
+      c.syncPick({budget:[],updatedAt:99},A({updatedAt:1})),   // 新裝置空資料：拿雲端（就算時間比較新）
+      c.syncPick(A({updatedAt:1}),A({updatedAt:2})),     // 雲端新：下載
+      c.syncPick(A({updatedAt:3}),A({updatedAt:2})),     // 這台新：上傳
+      c.syncPick(A({updatedAt:2}),A({updatedAt:2})),     // 一樣
+      c.syncPick(A({}),A({})),                           // 舊資料都沒時間：一樣，不動
+      c.syncPick(A({updatedAt:1}),{budget:[],updatedAt:9}) // 別台清空（比較新）：跟著清，這台舊的會先備份
+    ];
+    const n=[c.normalize({updatedAt:"123"}).updatedAt,c.normalize({updatedAt:"x"}).updatedAt,c.normalize({}).updatedAt,
+      c.importCode(c.exportCode(Object.assign(c.newData(),{updatedAt:7}))).updatedAt,c.countRecords({budget:[1],todos:[1,2],table:"a"})];
+    console.log(JSON.stringify({r,n}));""")
+    if out is None:
+        return
+    assert out["r"] == ["push", "same", "pull", "pull", "push", "same", "same", "pull"]
+    assert out["n"] == [123, 0, 0, 7, 4]
+
+
+def test_sync_is_optional():
+    """雲端同步是加上去的：沒有 sync.js 或載不到 Firebase，App 照常存在這台；設定碼只在 sync.js。"""
+    app = (ROOT / "app.js").read_text(encoding="utf-8")
+    sync = (ROOT / "sync.js").read_text(encoding="utf-8")
+    assert "if (window.tacoSync) window.tacoSync.changed();" in app and "if (window.tacoSync) window.tacoSync.paint();" in app
+    assert 'localStorage.setItem(KEY + "-backup"' in app          # 被雲端蓋掉前先備份
+    assert 'fb.fs.doc(fb.db, "users", user.uid)' in sync           # 對應 Firestore 規則 users/{uid}
+    assert "catch (e) {\n      setState(" in sync                   # 載不到 Firebase 不會讓 App 壞掉

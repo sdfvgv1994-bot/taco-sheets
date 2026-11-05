@@ -1,7 +1,7 @@
 // taco 試算表 App 的 service worker：有網路就拿最新的，沒網路時用上一次存下來的檔案（整個網站都能離線用）。
 const PREFIX = "taco-sheets";
 const CACHE = PREFIX + "-v2";   // v2：換新的存放區，把舊版可能存錯的首頁清掉
-const CORE = ["./", "./manifest.json", "./core.js", "./app.js", "./icon-192.png"];
+const CORE = ["./", "./manifest.json", "./core.js", "./app.js", "./sync.js", "./icon-192.png"];
 const abs = (u) => new URL(u, self.registration.scope).href;
 
 // 新版的存放區把 CORE 全部存齊了，才清掉自己舊版的存放區（taco-sheets 開頭的）。
